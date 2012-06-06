@@ -130,20 +130,40 @@ public class SQLServerDialectTest extends BaseCoreFunctionalTestCase {
 		s.flush();
 		s.clear();
 		
-		List list = s.createSQLQuery( "select id from Product2 where description like 'Kit%' order by id" ).list();
+		List list = s.createSQLQuery( "select id from Product2 where description like :pattern order by id" ).setString("pattern", "Kit%").list();
 		assertEquals(Integer.class, list.get(0).getClass()); // scalar result is an Integer
 
-		list = s.createSQLQuery( "select id from Product2 where description like 'Kit%' order by id" ).setFirstResult( 2 ).setMaxResults( 2 ).list();
+		list = s.createSQLQuery( "select id from Product2 where description like  :pattern  order by id" ).setString("pattern", "Kit%").setFirstResult( 2 ).setMaxResults( 2 ).list();
 		assertEquals(Integer.class, list.get(0).getClass()); // this fails without patch, as result suddenly has become an array
 		
-		// same once again with alias 
-		list = s.createSQLQuery( "select id as myint from Product2 where description like 'Kit%' order by id asc" ).setFirstResult( 2 ).setMaxResults( 2 ).list();
+		// same once again with alias (explicit AS keyword)
+		list = s.createSQLQuery( "select id as myint from Product2 where description like :pattern order by id asc" ).setString("pattern", "Kit%").setFirstResult( 2 ).setMaxResults( 2 ).list();
 		assertEquals(Integer.class, list.get(0).getClass()); 
+		
+		// same once again with alias (without optional AS keyword)
+		list = s.createSQLQuery( "select id myint from Product2 where description like :pattern order by id asc" ).setString("pattern", "Kit%").setFirstResult( 2 ).setMaxResults( 2 ).list();
+		assertEquals(Integer.class, list.get(0).getClass()); 
+		
+		// with subquery
+		list = s.createSQLQuery( "select id, description as descr, (select max(id) from Product2) maximum from Product2 where description like :pattern order by id" ).setString("pattern", "Kit%").setFirstResult( 0 ).setMaxResults( 2 ).list();
+		assertEquals(2, list.size());
+		assertEquals(3, ((Object[])list.get(0)).length );
+		
+		// with distinct clause & aliases without AS keyword
+		list = s.createSQLQuery( "select distinct id ranking, description descr from Product2 where description like :pattern order by id" ).setString("pattern", "Kit%").setFirstResult( 0 ).setMaxResults( 2 ).list();
+		assertEquals(2, list.size());
+		assertEquals(2, ((Object[])list.get(0)).length );
+		
+		// with distinct clause & aliases with AS keyword
+		list = s.createSQLQuery( "select distinct id as ranking, description as descr from Product2 where description like :pattern order by id" ).setString("pattern", "Kit%").setFirstResult( 0 ).setMaxResults( 2 ).list();
+		assertEquals(2, list.size());
+		assertEquals(2, ((Object[])list.get(0)).length );
+		
 		tx.rollback();
 		s.close();
 	}
 	
-	@TestForIssue(jiraKey = "HHH-7370")
+	@TestForIssue(jiraKey = "HHH-7368")
 	@Test
 	public void testPaginationCorrectness() throws Exception {
 
@@ -158,16 +178,16 @@ public class SQLServerDialectTest extends BaseCoreFunctionalTestCase {
 		s.flush();
 		s.clear();
 
-		List list = s.createSQLQuery( "select id from Product2 where description like 'Kit%' order by id" ).setFirstResult( 2 ).setMaxResults( 2 ).list();
+		List list = s.createQuery( "from Product2 where description like :pattern order by id" ).setString("pattern", "Kit%").setFirstResult( 2 ).setMaxResults( 2 ).list();
 		assertEquals(2, list.size());
-		assertEquals(2, list.get(0));
-		assertEquals(3, list.get(1));
+		assertEquals(2, ((Product2)list.get(0)).id.intValue());
+		assertEquals(3, ((Product2)list.get(1)).id.intValue());
 		
-		list = s.createSQLQuery( "select id from Product2 where description like 'Kit%' order by id" ).setFirstResult( 0 ).setMaxResults( 2 ).list();
+		list = s.createQuery( "from Product2 where description like :pattern order by id" ).setString("pattern", "Kit%").setFirstResult( 0 ).setMaxResults( 2 ).list();
 		assertEquals(2, list.size());
-		assertEquals(0, list.get(0));
-		assertEquals(1, list.get(1));
-		
+		assertEquals(0, ((Product2)list.get(0)).id.intValue());
+		assertEquals(1, ((Product2)list.get(1)).id.intValue());
+
 		tx.rollback();
 		s.close();
 	}
